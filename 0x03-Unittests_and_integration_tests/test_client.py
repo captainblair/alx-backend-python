@@ -2,7 +2,7 @@
 """
 Unit and integration tests for the client module.
 
-This file contains tests for the GithubOrgClient class.
+Tests for the GithubOrgClient class.
 """
 
 import unittest
@@ -111,8 +111,8 @@ class TestIntegrationGithubOrgClient(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Patch requests.get and configure side_effects for integration."""
-        cls.get_patcher = patch("client.requests.get")
-        cls.mock_get = cls.get_patcher.start()
+        cls.get_patcher = patch("requests.get")
+        cls.get_patcher_started = cls.get_patcher.start()
 
         def side_effect(url, *args, **kwargs):
             if url == cls.org_payload["url"]:
@@ -126,7 +126,7 @@ class TestIntegrationGithubOrgClient(unittest.TestCase):
             else:
                 raise ValueError(f"Unexpected URL: {url}")
 
-        cls.mock_get.side_effect = side_effect
+        cls.get_patcher_started.side_effect = side_effect
 
     @classmethod
     def tearDownClass(cls):
