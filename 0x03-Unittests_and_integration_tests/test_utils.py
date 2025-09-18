@@ -14,14 +14,20 @@ class TestMemoize(unittest.TestCase):
             """Simple class to test memoization"""
 
             def a_method(self):
+                """Return a fixed value"""
                 return 42
 
             @memoize
             def a_property(self):
+                """Return result of a_method (memoized)"""
                 return self.a_method()
 
         # Patch a_method so we can track calls
-        with patch.object(TestClass, "a_method", return_value=42) as mock_method:
+        with patch.object(
+            TestClass,
+            "a_method",
+            return_value=42
+        ) as mock_method:
             obj = TestClass()
 
             # Call a_property twice
