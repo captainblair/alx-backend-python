@@ -18,7 +18,9 @@ class TestGithubOrgClient(unittest.TestCase):
         ("google",),
         ("abc",),
     ])
-    @patch("client.get_json")
+    # ⚠️ IMPORTANT: choose the correct one depending on client.py
+    @patch("client.get_json")        # if: from utils import get_json
+    # @patch("client.utils.get_json")  # if: import utils
     def test_org(self, org_name, mock_get_json):
         """
         Test that GithubOrgClient.org returns the correct value and
