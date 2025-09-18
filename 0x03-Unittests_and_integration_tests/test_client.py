@@ -20,7 +20,10 @@ class TestGithubOrgClient(unittest.TestCase):
     ])
     @patch("client.get_json")
     def test_org(self, org_name, mock_get_json):
-        """Test that GithubOrgClient.org returns the expected value."""
+        """
+        Test that GithubOrgClient.org returns the expected value and
+        calls get_json once with the correct argument.
+        """
         test_payload = {"payload": True}
         mock_get_json.return_value = test_payload
 
@@ -33,7 +36,10 @@ class TestGithubOrgClient(unittest.TestCase):
         self.assertEqual(result, test_payload)
 
     def test_public_repos_url(self):
-        """Test that _public_repos_url returns the repos_url."""
+        """
+        Test that _public_repos_url returns the correct URL
+        from the mocked org payload.
+        """
         test_payload = {
             "repos_url": "https://api.github.com/orgs/google/repos"
         }
@@ -51,7 +57,10 @@ class TestGithubOrgClient(unittest.TestCase):
 
     @patch("client.get_json")
     def test_public_repos(self, mock_get_json):
-        """Test that public_repos returns list of repo names."""
+        """
+        Test that public_repos returns the correct list of repos,
+        and that get_json and _public_repos_url are called once.
+        """
         test_payload = [
             {"name": "repo1"},
             {"name": "repo2"},
@@ -75,6 +84,17 @@ class TestGithubOrgClient(unittest.TestCase):
             mock_get_json.assert_called_once_with(
                 "https://api.github.com/orgs/google/repos"
             )
+
+    @parameterized.expand([
+        ({"license": {"key": "my_license"}}, "my_license", True),
+        ({"license": {"key": "other_license"}}, "my_license", False),
+    ])
+    def test_has_license(self, repo, license_key, expected):
+        """
+        Test that has_license correctly checks the license key.
+        """
+        result = GithubOrgClient.has_license(repo, license_key)
+        self.assertEqual(result, expected)
 
 
 if __name__ == "__main__":
