@@ -18,12 +18,9 @@ class TestGithubOrgClient(unittest.TestCase):
         ("google",),
         ("abc",),
     ])
-    @patch("client.utils.get_json")  # <-- patched correctly
+    @patch("client.get_json")
     def test_org(self, org_name, mock_get_json):
-        """
-        Test that GithubOrgClient.org returns the correct value and
-        calls get_json exactly once with the expected argument.
-        """
+        """Test that GithubOrgClient.org returns the expected value."""
         test_payload = {"payload": True}
         mock_get_json.return_value = test_payload
 
@@ -36,10 +33,7 @@ class TestGithubOrgClient(unittest.TestCase):
         self.assertEqual(result, test_payload)
 
     def test_public_repos_url(self):
-        """
-        Test that _public_repos_url returns the correct URL
-        based on the mocked org payload.
-        """
+        """Test that _public_repos_url returns the repos_url."""
         test_payload = {
             "repos_url": "https://api.github.com/orgs/google/repos"
         }
@@ -55,12 +49,9 @@ class TestGithubOrgClient(unittest.TestCase):
             result = client._public_repos_url
             self.assertEqual(result, test_payload["repos_url"])
 
-    @patch("client.utils.get_json")  # <-- patched correctly
+    @patch("client.get_json")
     def test_public_repos(self, mock_get_json):
-        """
-        Test that public_repos returns the correct list of repos,
-        and that get_json and _public_repos_url are called once.
-        """
+        """Test that public_repos returns list of repo names."""
         test_payload = [
             {"name": "repo1"},
             {"name": "repo2"},
