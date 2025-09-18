@@ -12,7 +12,7 @@ from client import GithubOrgClient
 
 
 class TestGithubOrgClient(unittest.TestCase):
-    """Unit tests for GithubOrgClient"""
+    """Unit tests for GithubOrgClient."""
 
     @parameterized.expand([
         ("google",),
@@ -30,11 +30,12 @@ class TestGithubOrgClient(unittest.TestCase):
         client = GithubOrgClient(org_name)
         result = client.org
 
-        # Assert get_json called once with correct URL
+        # Assert get_json was called once with the correct URL
         mock_get_json.assert_called_once_with(
             f"https://api.github.com/orgs/{org_name}"
         )
-        # Assert returned value is the mocked payload
+
+        # Assert the return value is the mocked payload
         self.assertEqual(result, test_payload)
 
 
