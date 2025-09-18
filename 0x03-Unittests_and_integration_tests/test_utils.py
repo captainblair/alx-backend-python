@@ -1,25 +1,31 @@
 #!/usr/bin/env python3
+"""
+Unit tests for the utils module.
+
+This file contains tests for the memoize decorator.
+"""
+
 import unittest
 from unittest.mock import patch
 from utils import memoize
 
 
 class TestMemoize(unittest.TestCase):
-    """Unit tests for utils.memoize decorator"""
+    """Unit tests for utils.memoize decorator."""
 
     def test_memoize(self):
-        """Test that a_method is only called once when memoized"""
+        """Test that a_method is only called once when memoized."""
 
         class TestClass:
-            """Simple class to test memoization"""
+            """Simple class to test memoization."""
 
             def a_method(self):
-                """Return a fixed value"""
+                """Return a fixed value."""
                 return 42
 
             @memoize
             def a_property(self):
-                """Return result of a_method (memoized)"""
+                """Return result of a_method (memoized)."""
                 return self.a_method()
 
         # Patch a_method so we can track calls
