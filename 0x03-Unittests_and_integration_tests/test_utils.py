@@ -11,6 +11,8 @@ class TestMemoize(unittest.TestCase):
         """Test that a_method is only called once when memoized"""
 
         class TestClass:
+            """Simple class to test memoization"""
+
             def a_method(self):
                 return 42
 
@@ -29,7 +31,8 @@ class TestMemoize(unittest.TestCase):
             # Assertions
             self.assertEqual(result1, 42)
             self.assertEqual(result2, 42)
-            mock_method.assert_called_once()  # should only be called once
+            # Ensure a_method is only called once
+            mock_method.assert_called_once()
 
 
 if __name__ == "__main__":
