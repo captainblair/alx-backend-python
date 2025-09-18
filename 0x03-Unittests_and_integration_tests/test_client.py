@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-#!/usr/bin/env python3
-"""Integration tests for client.py"""
-
+"""Integration tests for GithubOrgClient"""
 import unittest
 from unittest.mock import patch
-from client import GithubOrgClient   # ✅ flat import
-from fixtures import TEST_PAYLOAD    # ✅ flat import
+from client import GithubOrgClient
+from fixtures import TEST_PAYLOAD
 
 
 class TestIntegrationGithubOrgClient(unittest.TestCase):
