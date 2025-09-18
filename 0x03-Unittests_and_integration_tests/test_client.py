@@ -28,6 +28,9 @@ class TestGithubOrgClient(unittest.TestCase):
             # Call the public_repos method
             repos = client.public_repos()
 
+            # Debugging: Print the returned list of repos
+            print(f"Returned repos: {repos}")
+
             # Test that the returned list of repos matches the mocked payload
             self.assertEqual(repos, ["repo1", "repo2", "repo3"])
 
