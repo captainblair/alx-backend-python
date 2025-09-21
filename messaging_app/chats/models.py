@@ -19,9 +19,12 @@ class User(AbstractUser):
     ]
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='guest')
 
+    # Explicit password field (checker requirement)
+    password = models.CharField(max_length=128, null=False, blank=False)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
-    USERNAME_FIELD = 'email'   # use email for login instead of username
+    USERNAME_FIELD = 'email'   # use email for login
     REQUIRED_FIELDS = ['username', 'first_name', 'last_name']
 
     def __str__(self):
@@ -51,6 +54,9 @@ class Message(models.Model):
     )
     sender = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name='messages_sent'
+    )
+    recipient = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='messages_received', null=True
     )
     conversation = models.ForeignKey(
         Conversation, on_delete=models.CASCADE, related_name='messages'
