@@ -1,25 +1,18 @@
-# chats/middleware.py
-import logging
 from datetime import datetime
+from django.conf import settings
 
 class RequestLoggingMiddleware:
     def __init__(self, get_response):
-        # Django passes in get_response which we call later
         self.get_response = get_response
-        # Set up logger (writes to requests.log)
-        logging.basicConfig(
-            filename="requests.log",   # log file in project root
-            level=logging.INFO,        # log level
-            format="%(message)s"       # only log message, no extras
-        )
 
     def __call__(self, request):
-        # Get user info (Anonymous if not logged in)
+        # Determine user; fallback if not authenticated
         user = request.user if request.user.is_authenticated else "Anonymous"
+        log_path = settings.BASE_DIR / "requests.log"
 
-        # Log details: timestamp - user - path
-        logging.info(f"{datetime.now()} - User: {user} - Path: {request.path}")
+        # Append log
+        with open(log_path, "a") as f:
+            f.write(f"{datetime.now()} - User: {user} - Path: {request.path}\n")
 
-        # Continue with normal request-response cycle
         response = self.get_response(request)
         return response
