@@ -1,30 +1,25 @@
 # chats/middleware.py
+import logging
+from datetime import datetime
 
 class RequestLoggingMiddleware:
-    """Middleware that logs every request to requests.log"""
-
     def __init__(self, get_response):
-        self.get_response = get_response  # Django standard
-
-    def __call__(self, request):
-        # Append the requested path to requests.log
-        with open("requests.log", "a") as f:
-            f.write(f"{request.path}\n")
-
-        response = self.get_response(request)  # continue processing
-        return response
-
-
-class RestrictAccessByTimeMiddleware:
-    """Middleware that blocks access outside 9am-5pm"""
-
-    def __init__(self, get_response):
+        # Django passes in get_response which we call later
         self.get_response = get_response
+        # Set up logger (writes to requests.log)
+        logging.basicConfig(
+            filename="requests.log",   # log file in project root
+            level=logging.INFO,        # log level
+            format="%(message)s"       # only log message, no extras
+        )
 
     def __call__(self, request):
-        import datetime
-        now = datetime.datetime.now()
-        if not (9 <= now.hour < 17):
-            from django.http import HttpResponse
-            return HttpResponse("Access not allowed at this time.", status=403)
-        return self.get_response(request)
+        # Get user info (Anonymous if not logged in)
+        user = request.user if request.user.is_authenticated else "Anonymous"
+
+        # Log details: timestamp - user - path
+        logging.info(f"{datetime.now()} - User: {user} - Path: {request.path}")
+
+        # Continue with normal request-response cycle
+        response = self.get_response(request)
+        return response
