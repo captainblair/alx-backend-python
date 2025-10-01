@@ -2,7 +2,27 @@ from django.contrib import admin
 from django.utils.html import format_html
 from django.urls import reverse
 from django.utils.safestring import mark_safe
+from django.db.models import Count
+
 from .models import Message, Notification, MessageHistory
+
+
+class HasRepliesFilter(admin.SimpleListFilter):
+    title = 'has replies'
+    parameter_name = 'has_replies'
+
+    def lookups(self, request, model_admin):
+        return (
+            ('yes', 'Yes'),
+            ('no', 'No'),
+        )
+
+    def queryset(self, request, queryset):
+        if self.value() == 'yes':
+            return queryset.filter(replies__isnull=False).distinct()
+        if self.value() == 'no':
+            return queryset.filter(replies__isnull=True)
+        return queryset
 
 
 class MessageHistoryInline(admin.TabularInline):
@@ -19,19 +39,53 @@ class MessageHistoryInline(admin.TabularInline):
         return False
 
 
+class MessageInline(admin.TabularInline):
+    model = Message
+    fk_name = 'parent_message'
+    extra = 0
+    fields = ('id', 'sender', 'receiver', 'content', 'timestamp', 'is_read')
+    readonly_fields = ('id', 'sender', 'receiver', 'timestamp')
+    show_change_link = True
+    can_delete = False
+
+
 @admin.register(Message)
 class MessageAdmin(admin.ModelAdmin):
-    list_display = ('id', 'sender', 'receiver', 'timestamp', 'is_read', 'was_edited', 'view_history')
-    list_filter = ('is_read', 'edited', 'timestamp')
-    search_fields = ('content', 'sender__username', 'receiver__username')
-    date_hierarchy = 'timestamp'
-    readonly_fields = ('timestamp', 'edited', 'view_history')
-    inlines = [MessageHistoryInline]
+    list_display = (
+        'id', 'sender', 'receiver', 'timestamp', 
+        'is_read', 'edited', 'reply_count', 'view_thread'
+    )
+    list_filter = (
+        'is_read', 'edited', 'timestamp', 
+        'sender', 'receiver', HasRepliesFilter
+    )
+    search_fields = (
+        'content', 'sender__username', 'receiver__username',
+        'sender__email', 'receiver__email'
+    )
+    readonly_fields = (
+        'timestamp', 'edited', 'parent_message_link',
+        'reply_count', 'thread_updated'
+    )
+    fieldsets = (
+        (None, {
+            'fields': ('sender', 'receiver', 'content', 'is_read')
+        }),
+        ('Thread Info', {
+            'fields': ('parent_message_link', 'reply_count', 'thread_updated'),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('timestamp', 'edited'),
+            'classes': ('collapse',)
+        }),
+    )
+    inlines = [MessageInline]
     
-    def was_edited(self, obj):
-        return obj.edited
-    was_edited.boolean = True
-    was_edited.short_description = 'Edited'
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(
+            reply_count=Count('replies')
+        )
     
     def view_history(self, obj):
         if obj.edit_history.exists():
