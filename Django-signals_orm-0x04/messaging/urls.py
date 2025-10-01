@@ -11,6 +11,20 @@ urlpatterns = [
         login_required(views.ThreadListView.as_view()),
         name='thread_list',
     ),
+    
+    # Unread messages API
+    path(
+        'api/messages/unread/',
+        views.unread_messages_api,
+        name='api_unread_messages',
+    ),
+    
+    # Mark messages as read API
+    path(
+        'api/messages/mark-read/',
+        views.mark_as_read_api,
+        name='api_mark_read',
+    ),
     path(
         'threads/<int:pk>/',
         login_required(views.ThreadDetailView.as_view()),

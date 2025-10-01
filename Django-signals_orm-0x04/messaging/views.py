@@ -122,11 +122,13 @@ def thread_list_api(request, other_user_id=None, message_id=None):
     """
     API endpoint to get message threads.
     Can return all threads, threads with a specific user, or a specific thread.
+    Uses the custom unread messages manager for optimized queries.
     """
-    # Optimize queries with select_related and prefetch_related
-    threads = Message.objects.filter(
-        Q(sender=request.user) | Q(receiver=request.user)
-    )
+    # Use the custom manager for unread messages
+    unread_count = Message.unread.unread_count(request.user)
+    
+    # Get threads using the custom queryset methods
+    threads = Message.objects.for_user(request.user)
     
     # Filter for specific message thread if message_id is provided
     if message_id:
@@ -165,19 +167,24 @@ def thread_list_api(request, other_user_id=None, message_id=None):
             (Q(sender=other_user) & Q(receiver=request.user))
         )
     
-    # Get root messages (thread starters) with optimization
+    # Get root messages (thread starters) with optimization using custom queryset
     root_messages = threads.filter(parent_message__isnull=True)
     
-    # Prefetch related data to reduce queries
+    # Prefetch related data to reduce queries using the custom manager
     root_messages = root_messages.select_related('sender', 'receiver').prefetch_related(
         Prefetch(
             'replies',
-            queryset=Message.objects.select_related('sender', 'receiver')
-                                 .filter(Q(sender=request.user) | Q(receiver=request.user))
-                                 .order_by('timestamp'),
+            queryset=Message.objects.for_user(request.user)
+                                 .order_by('timestamp')
+                                 .only('id', 'content', 'timestamp', 'is_read', 
+                                      'sender_id', 'receiver_id', 'parent_message_id'),
             to_attr='prefetched_replies'
         )
     ).order_by('-thread_updated')
+    
+    # Mark messages as read if this is a specific thread view
+    if message_id:
+        Message.unread.mark_as_read([message_id], request.user)
     
     # Prepare response data
     thread_data = []
@@ -205,7 +212,65 @@ def thread_list_api(request, other_user_id=None, message_id=None):
             'latest_reply': thread.prefetched_replies[-1].timestamp if hasattr(thread, 'prefetched_replies') and thread.prefetched_replies else None
         })
     
-    return JsonResponse({'threads': thread_data})
+    return JsonResponse({
+        'threads': thread_data,
+        'unread_count': unread_count
+    })
+
+
+@login_required
+def unread_messages_api(request):
+    """
+    API endpoint to get unread messages for the current user.
+    Uses the custom unread messages manager for optimized queries.
+    """
+    # Get unread messages using the custom manager
+    unread_messages = Message.unread.for_user(request.user)
+    
+    # Format the response
+    messages_data = [{
+        'id': msg.id,
+        'content': msg.content,
+        'timestamp': msg.timestamp.isoformat(),
+        'sender': {
+            'id': msg.sender.id,
+            'username': msg.sender.username,
+            'email': msg.sender.email
+        },
+        'is_read': msg.is_read,
+        'thread_id': msg.parent_message_id or msg.id
+    } for msg in unread_messages]
+    
+    return JsonResponse({
+        'count': len(messages_data),
+        'messages': messages_data
+    })
+
+
+@login_required
+def mark_as_read_api(request):
+    """
+    API endpoint to mark messages as read.
+    Expects a list of message IDs in the request body.
+    """
+    if request.method == 'POST':
+        try:
+            message_ids = request.POST.getlist('message_ids[]') or json.loads(request.body).get('message_ids', [])
+            if not isinstance(message_ids, list):
+                return JsonResponse({'error': 'message_ids must be a list'}, status=400)
+                
+            # Mark messages as read using the custom manager
+            updated = Message.unread.mark_as_read(message_ids, request.user)
+            
+            return JsonResponse({
+                'status': 'success',
+                'updated_count': updated
+            })
+            
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    
+    return JsonResponse({'error': 'Method not allowed'}, status=405)
 
 
 @require_http_methods(["POST"])
