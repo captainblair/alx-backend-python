@@ -118,24 +118,94 @@ def get_threads_for_user(user):
 
 
 @login_required
-def thread_list_api(request):
-    """API endpoint to get all threads for the current user."""
-    threads = get_threads_for_user(request.user)
+def thread_list_api(request, other_user_id=None, message_id=None):
+    """
+    API endpoint to get message threads.
+    Can return all threads, threads with a specific user, or a specific thread.
+    """
+    # Optimize queries with select_related and prefetch_related
+    threads = Message.objects.filter(
+        Q(sender=request.user) | Q(receiver=request.user)
+    )
     
-    # Convert to JSON-serializable format
-    def message_to_dict(message):
-        return {
-            'id': message.id,
-            'sender': message.sender.username,
-            'receiver': message.receiver.username,
-            'content': message.content,
-            'timestamp': message.timestamp.isoformat(),
-            'replies': [message_to_dict(reply) for reply in getattr(message, 'prefetched_replies', [])]
-        }
+    # Filter for specific message thread if message_id is provided
+    if message_id:
+        thread = get_object_or_404(threads, id=message_id, parent_message__isnull=True)
+        thread_messages = Message.objects.filter(
+            Q(pk=thread.pk) | Q(parent_message__in=thread.get_descendants())
+        ).select_related('sender', 'receiver').order_by('timestamp')
+        
+        return JsonResponse({
+            'thread': {
+                'id': thread.id,
+                'messages': [{
+                    'id': msg.id,
+                    'content': msg.content,
+                    'timestamp': msg.timestamp,
+                    'is_read': msg.is_read,
+                    'sender': {
+                        'id': msg.sender.id,
+                        'username': msg.sender.username,
+                        'email': msg.sender.email,
+                    },
+                    'receiver': {
+                        'id': msg.receiver.id,
+                        'username': msg.receiver.username,
+                        'email': msg.receiver.email,
+                    }
+                } for msg in thread_messages]
+            }
+        })
     
-    return JsonResponse({
-        'threads': [message_to_dict(thread) for thread in threads]
-    })
+    # Filter for specific user if other_user_id is provided
+    if other_user_id:
+        other_user = get_object_or_404(User, id=other_user_id)
+        threads = threads.filter(
+            (Q(sender=request.user) & Q(receiver=other_user)) |
+            (Q(sender=other_user) & Q(receiver=request.user))
+        )
+    
+    # Get root messages (thread starters) with optimization
+    root_messages = threads.filter(parent_message__isnull=True)
+    
+    # Prefetch related data to reduce queries
+    root_messages = root_messages.select_related('sender', 'receiver').prefetch_related(
+        Prefetch(
+            'replies',
+            queryset=Message.objects.select_related('sender', 'receiver')
+                                 .filter(Q(sender=request.user) | Q(receiver=request.user))
+                                 .order_by('timestamp'),
+            to_attr='prefetched_replies'
+        )
+    ).order_by('-thread_updated')
+    
+    # Prepare response data
+    thread_data = []
+    for thread in root_messages:
+        other_user = thread.sender if thread.receiver == request.user else thread.receiver
+        
+        # Get unread count for this thread
+        unread_count = sum(
+            1 for reply in getattr(thread, 'prefetched_replies', []) 
+            if not reply.is_read and reply.receiver == request.user
+        )
+        
+        thread_data.append({
+            'id': thread.id,
+            'content': thread.content,
+            'timestamp': thread.timestamp,
+            'thread_updated': thread.thread_updated,
+            'other_user': {
+                'id': other_user.id,
+                'username': other_user.username,
+                'email': other_user.email,
+            },
+            'unread_count': unread_count,
+            'reply_count': len(getattr(thread, 'prefetched_replies', [])),
+            'latest_reply': thread.prefetched_replies[-1].timestamp if hasattr(thread, 'prefetched_replies') and thread.prefetched_replies else None
+        })
+    
+    return JsonResponse({'threads': thread_data})
 
 
 @require_http_methods(["POST"])
