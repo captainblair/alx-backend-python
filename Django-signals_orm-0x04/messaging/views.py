@@ -8,6 +8,8 @@ from django.views.generic import DeleteView, ListView, DetailView, TemplateView
 from django.contrib.auth.views import LoginView, LogoutView
 from django.contrib.messages.views import SuccessMessageMixin
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.cache import cache_page
+from django.utils.decorators import method_decorator
 from django.http import JsonResponse, Http404
 from django.db.models import Q, Prefetch, Count
 
@@ -35,13 +37,20 @@ class DeleteUserView(SuccessMessageMixin, DeleteView):
         return response
 
 
-@method_decorator(login_required, name='dispatch')
 class ThreadListView(ListView):
-    """View to display all message threads for the current user."""
+    """
+    View to display all message threads for the current user.
+    Cached for 60 seconds to improve performance.
+    """
     model = Message
     template_name = 'messaging/thread_list.html'
     context_object_name = 'threads'
     paginate_by = 20
+    
+    @method_decorator(login_required)
+    @method_decorator(cache_page(60))  # Cache for 60 seconds
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
     
     def get_queryset(self):
         """Optimize queries with select_related and prefetch_related."""
@@ -64,10 +73,18 @@ class ThreadListView(ListView):
 
 @method_decorator(login_required, name='dispatch')
 class ThreadDetailView(DetailView):
-    """View to display a single thread with all its replies."""
+    """
+    View to display a single thread with all its replies.
+    Cached for 60 seconds to improve performance.
+    """
     model = Message
     template_name = 'messaging/thread_detail.html'
     context_object_name = 'message'
+    
+    @method_decorator(login_required)
+    @method_decorator(cache_page(60))  # Cache for 60 seconds
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
     
     def get_queryset(self):
         """Optimize queries for thread detail view."""
@@ -118,11 +135,13 @@ def get_threads_for_user(user):
 
 
 @login_required
+@cache_page(60)  # Cache for 60 seconds
 def thread_list_api(request, other_user_id=None, message_id=None):
     """
     API endpoint to get message threads.
     Can return all threads, threads with a specific user, or a specific thread.
     Uses the custom unread messages manager for optimized queries.
+    Cached for 60 seconds to improve performance.
     """
     # Use the custom manager for unread messages
     unread_count = Message.unread.unread_count(request.user)

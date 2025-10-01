@@ -28,3 +28,14 @@ TIME_ZONE = 'UTC'
 USE_TZ = True
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Cache settings
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
+    }
+}
+
+# Cache timeout in seconds
+CACHE_MIDDLEWARE_SECONDS = 60
