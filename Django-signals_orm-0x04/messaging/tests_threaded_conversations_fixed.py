@@ -94,7 +94,7 @@ class ThreadedConversationTests(TestCase):
         self.assertEqual(result['replies'][0]['id'], self.reply1.id)
     
     def test_get_conversation_threads_all(self):
-        ""Test getting all threads between two users."""
+        """Test getting all threads between two users."""
         result = get_conversation_threads(
             user_id=self.user1.id,
             other_user_id=self.user2.id
@@ -104,7 +104,7 @@ class ThreadedConversationTests(TestCase):
         self.assertEqual(len(result['threads']), 2)
     
     def test_query_optimization(self):
-        ""Test that we're using select_related and prefetch_related properly."""
+        """Test that we're using select_related and prefetch_related properly."""
         with self.assertNumQueries(3):  # 1 for messages, 1 for replies, 1 for users
             threads = get_threaded_messages(self.user1.id)
             
@@ -115,7 +115,7 @@ class ThreadedConversationTests(TestCase):
                     _ = reply['sender']
     
     def test_thread_depth_limitation(self):
-        ""Test that we don't have infinite recursion."""
+        """Test that we don't have infinite recursion."""
         # Create a deep thread
         current = self.root_message
         for i in range(15):  # More than our default max_depth of 10

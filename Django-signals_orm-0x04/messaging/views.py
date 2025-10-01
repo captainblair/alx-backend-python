@@ -1,14 +1,17 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.shortcuts import redirect
-from django.urls import reverse_lazy
+from django.shortcuts import redirect, render, get_object_or_404
+from django.urls import reverse_lazy, reverse
 from django.utils.decorators import method_decorator
-from django.views.generic import DeleteView
+from django.views.generic import DeleteView, ListView, DetailView, TemplateView
 from django.contrib.auth.views import LoginView, LogoutView
 from django.contrib.messages.views import SuccessMessageMixin
 from django.views.decorators.http import require_http_methods
+from django.http import JsonResponse, Http404
+from django.db.models import Q, Prefetch, Count
 
+from .models import Message, MessageHistory
 User = get_user_model()
 
 @method_decorator(login_required, name='dispatch')
@@ -22,14 +25,117 @@ class DeleteUserView(SuccessMessageMixin, DeleteView):
     success_message = "Your account has been successfully deleted."
     
     def get_object(self, queryset=None):
-        ""Return the user to be deleted."""
+        """Return the user to be deleted."""
         return self.request.user
     
     def delete(self, request, *args, **kwargs):
-        ""Override delete to add success message."""
+        """Override delete to add success message."""
         response = super().delete(request, *args, **kwargs)
         messages.success(self.request, self.success_message)
         return response
+
+
+@method_decorator(login_required, name='dispatch')
+class ThreadListView(ListView):
+    """View to display all message threads for the current user."""
+    model = Message
+    template_name = 'messaging/thread_list.html'
+    context_object_name = 'threads'
+    paginate_by = 20
+    
+    def get_queryset(self):
+        """Optimize queries with select_related and prefetch_related."""
+        # Get all threads where user is either sender or receiver
+        threads = Message.objects.filter(
+            Q(sender=self.request.user) | Q(receiver=self.request.user),
+            parent_message__isnull=True  # Only root messages
+        ).select_related('sender', 'receiver')
+        
+        # Prefetch replies with optimization
+        return threads.prefetch_related(
+            Prefetch(
+                'replies',
+                queryset=Message.objects.select_related('sender', 'receiver')
+                                     .order_by('timestamp'),
+                to_attr='prefetched_replies'
+            )
+        ).order_by('-thread_updated')
+
+
+@method_decorator(login_required, name='dispatch')
+class ThreadDetailView(DetailView):
+    """View to display a single thread with all its replies."""
+    model = Message
+    template_name = 'messaging/thread_detail.html'
+    context_object_name = 'message'
+    
+    def get_queryset(self):
+        """Optimize queries for thread detail view."""
+        return Message.objects.select_related('sender', 'receiver')
+    
+    def get_context_data(self, **kwargs):
+        """Add thread context with optimized queries."""
+        context = super().get_context_data(**kwargs)
+        message = self.get_object()
+        
+        # Get the root message if this is a reply
+        root_message = message.get_root()
+        
+        # Get all messages in the thread with optimized queries
+        thread_messages = Message.objects.filter(
+            Q(pk=root_message.pk) | Q(parent_message__in=root_message.get_descendants())
+        ).select_related('sender', 'receiver').order_by('timestamp')
+        
+        context['thread_messages'] = thread_messages
+        context['root_message'] = root_message
+        return context
+    
+    def get_object(self, queryset=None):
+        """Ensure user has permission to view this thread."""
+        message = super().get_object(queryset)
+        if message.sender != self.request.user and message.receiver != self.request.user:
+            raise Http404("You don't have permission to view this thread.")
+        return message
+
+
+def get_threads_for_user(user):
+    """Helper function to get threads for a user with optimized queries."""
+    # Get all threads where user is either sender or receiver
+    threads = Message.objects.filter(
+        Q(sender=user) | Q(receiver=user),
+        parent_message__isnull=True  # Only root messages
+    ).select_related('sender', 'receiver')
+    
+    # Prefetch replies with optimization
+    return threads.prefetch_related(
+        Prefetch(
+            'replies',
+            queryset=Message.objects.select_related('sender', 'receiver')
+                                 .order_by('timestamp'),
+            to_attr='prefetched_replies'
+        )
+    ).order_by('-thread_updated')
+
+
+@login_required
+def thread_list_api(request):
+    """API endpoint to get all threads for the current user."""
+    threads = get_threads_for_user(request.user)
+    
+    # Convert to JSON-serializable format
+    def message_to_dict(message):
+        return {
+            'id': message.id,
+            'sender': message.sender.username,
+            'receiver': message.receiver.username,
+            'content': message.content,
+            'timestamp': message.timestamp.isoformat(),
+            'replies': [message_to_dict(reply) for reply in getattr(message, 'prefetched_replies', [])]
+        }
+    
+    return JsonResponse({
+        'threads': [message_to_dict(thread) for thread in threads]
+    })
 
 
 @require_http_methods(["POST"])

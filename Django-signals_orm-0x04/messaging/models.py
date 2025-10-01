@@ -79,6 +79,47 @@ class Message(models.Model):
             ]
         }
 
+    def get_root(self):
+        """
+        Get the root message of the thread.
+        Uses iterative approach to avoid recursion depth issues.
+        """
+        current = self
+        while current.parent_message:
+            current = current.parent_message
+        return current
+    
+    def get_descendants(self, include_self=False):
+        """
+        Get all descendant messages of this message.
+        Uses a non-recursive approach to avoid recursion depth issues.
+        """
+        from django.db.models import Q
+        
+        # Start with direct replies
+        descendants = list(self.replies.all())
+        if include_self:
+            result = [self] + descendants
+        else:
+            result = descendants
+        
+        # Get all nested replies using a single query
+        if descendants:
+            # Build a query to get all descendants
+            query = Q(pk__in=[m.pk for m in descendants])
+            
+            # Get all replies to these messages
+            level = self.replies.all()
+            while level.exists():
+                level_pks = list(level.values_list('pk', flat=True))
+                next_level = Message.objects.filter(parent_message_id__in=level_pks)
+                if next_level.exists():
+                    query |= Q(pk__in=list(next_level.values_list('pk', flat=True)))
+                    result.extend(next_level)
+                level = next_level
+        
+        return result
+    
     def __str__(self):
         return f'Message from {self.sender} to {self.receiver} at {self.timestamp}'
 
