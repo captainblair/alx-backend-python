@@ -225,7 +225,7 @@ def unread_messages_api(request):
     Uses the custom unread messages manager for optimized queries.
     """
     # Get unread messages using the custom manager
-    unread_messages = Message.unread.for_user(request.user)
+    unread_messages = Message.unread.unread_for_user(request.user)
     
     # Format the response
     messages_data = [{
