@@ -1,7 +1,10 @@
-from django.db.models.signals import post_save, pre_save
+from django.db.models.signals import post_save, pre_save, post_delete
 from django.dispatch import receiver
 from django.utils import timezone
+from django.contrib.auth import get_user_model
 from .models import Message, Notification, MessageHistory
+
+User = get_user_model()
 
 
 @receiver(post_save, sender=Message)
@@ -43,9 +46,34 @@ def track_message_edits(sender, instance, **kwargs):
 
 
 def ready(self):
-    ""
-    Import signals to ensure they are registered when the app is ready.
+    """Import signals to ensure they are registered when the app is ready.
+    
     This method is called in the AppConfig.ready() method.
     """
     # Import signals to register them
     import messaging.signals  # noqa
+
+
+@receiver(post_delete, sender=User)
+def delete_user_related_data(sender, instance, **kwargs):
+    """
+    Signal to clean up user-related data when a user is deleted.
+    This is a safety net in case CASCADE doesn't work as expected.
+    """
+    # Delete all messages where user is sender or receiver
+    Message.objects.filter(sender=instance).delete()
+    Message.objects.filter(receiver=instance).delete()
+    
+    # Delete all notifications for the user
+    Notification.objects.filter(user=instance).delete()
+    
+    # Delete message history where user is the editor
+    MessageHistory.objects.filter(edited_by=instance).delete()
+    
+    # Clean up any remaining references in message history
+    # for messages that might have been sent to this user
+    MessageHistory.objects.filter(message__receiver=instance).delete()
+    
+    # Clean up any remaining references in notifications
+    # for messages that might have been sent by this user
+    Notification.objects.filter(message__sender=instance).delete()

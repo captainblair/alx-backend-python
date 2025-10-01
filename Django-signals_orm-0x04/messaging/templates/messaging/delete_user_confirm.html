@@ -1,0 +1,93 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div class="content">
+    <h1>Delete Account</h1>
+    <p>Are you sure you want to delete your account? This action cannot be undone.</p>
+    <p>This will permanently delete:</p>
+    <ul>
+        <li>Your profile information</li>
+        <li>All messages you've sent and received</li>
+        <li>All your notifications</li>
+        <li>Your message edit history</li>
+    </ul>
+    
+    <form method="post">
+        {% csrf_token %}
+        <div class="submit-row">
+            <a href="{% url 'profile' %}" class="button cancel-link">No, take me back</a>
+            <input type="submit" value="Yes, I'm sure" class="default" style="background: #ba2121;">
+        </div>
+    </form>
+</div>
+
+<style>
+    .content {
+        max-width: 800px;
+        margin: 20px auto;
+        padding: 20px;
+        background: #fff;
+        border: 1px solid #e0e0e0;
+        border-radius: 4px;
+    }
+    
+    h1 {
+        color: #333;
+        margin-bottom: 20px;
+    }
+    
+    p {
+        margin-bottom: 15px;
+        line-height: 1.5;
+    }
+    
+    ul {
+        margin-left: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .submit-row {
+        display: flex;
+        justify-content: flex-end;
+        padding: 12px 14px;
+        margin: 0 0 20px;
+        background: #f8f8f8;
+        border: 1px solid #eee;
+        border-radius: 4px;
+        text-align: right;
+    }
+    
+    .button, input[type="submit"] {
+        padding: 8px 15px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 13px;
+        line-height: 20px;
+        text-decoration: none;
+    }
+    
+    .cancel-link {
+        background: #ddd;
+        color: #333;
+        margin-right: 15px;
+    }
+    
+    .default {
+        background: #79aec8;
+        color: #fff;
+    }
+    
+    .default:hover {
+        background: #609ab6;
+    }
+    
+    [type="submit"].default {
+        background: #ba2121;
+    }
+    
+    [type="submit"].default:hover {
+        background: #a41515;
+    }
+</style>
+{% endblock %}
