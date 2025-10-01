@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',   # added
     'chats',            # your new app
+    'messaging',        # our new messaging app with signals
 ]
 
 # Django REST framework settings
