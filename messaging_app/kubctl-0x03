@@ -1,0 +1,86 @@
+#!/bin/bash
+
+# Apply the updated deployment file and trigger a rolling update
+echo "Applying the updated deployment..."
+kubectl apply -f blue_deployment.yaml
+
+# Check if the apply was successful
+if [ $? -ne 0 ]; then
+    echo "Failed to apply deployment"
+    exit 1
+fi
+
+# Get the service URL for testing
+echo "Getting service URL..."
+SERVICE_URL=$(minikube service messaging-app-service --url 2>/dev/null)
+
+# If minikube service command fails, try to get the service IP and port
+if [ -z "$SERVICE_URL" ]; then
+    echo "Waiting for service to be ready..."
+    sleep 5
+    SERVICE_URL="http://localhost:8000"
+fi
+
+echo "Service URL: $SERVICE_URL"
+
+# Start continuous curl requests in the background to test for downtime
+echo "Starting continuous requests to test for downtime..."
+DOWNTIME_COUNT=0
+REQUEST_COUNT=0
+TEMP_FILE="/tmp/curl_test_$$"
+
+# Function to continuously send requests
+test_downtime() {
+    while true; do
+        REQUEST_COUNT=$((REQUEST_COUNT + 1))
+        if ! curl -s -o /dev/null -w "%{http_code}" "$SERVICE_URL" --connect-timeout 2 --max-time 5 > "$TEMP_FILE" 2>&1; then
+            DOWNTIME_COUNT=$((DOWNTIME_COUNT + 1))
+            echo "Request $REQUEST_COUNT: FAILED (Downtime detected)"
+        else
+            HTTP_CODE=$(cat "$TEMP_FILE")
+            if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "000" ]; then
+                echo "Request $REQUEST_COUNT: HTTP $HTTP_CODE"
+            fi
+        fi
+        sleep 1
+    done
+}
+
+# Start the downtime test in the background
+test_downtime &
+CURL_PID=$!
+
+# Monitor the rollout status
+echo "Monitoring rollout status..."
+kubectl rollout status deployment/blue-deployment
+
+# Wait a few more seconds to ensure stability
+echo "Waiting for deployment to stabilize..."
+sleep 10
+
+# Stop the continuous curl requests
+kill $CURL_PID 2>/dev/null
+rm -f "$TEMP_FILE"
+
+# Display downtime statistics
+echo ""
+echo "=== Downtime Test Results ==="
+echo "Total requests: $REQUEST_COUNT"
+echo "Failed requests: $DOWNTIME_COUNT"
+if [ $DOWNTIME_COUNT -eq 0 ]; then
+    echo "✓ No downtime detected during rolling update"
+else
+    echo "⚠ Downtime detected: $DOWNTIME_COUNT failed requests"
+fi
+echo ""
+
+# Verify the rolling update is complete by checking current pods
+echo "=== Current Pods Status ==="
+kubectl get pods -l app=messaging-app
+
+echo ""
+echo "=== Deployment Details ==="
+kubectl describe deployment blue-deployment | grep -A 5 "Replicas:"
+
+echo ""
+echo "=== Rolling Update Complete ==="
