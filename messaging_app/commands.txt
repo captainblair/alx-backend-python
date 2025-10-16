@@ -1,0 +1,32 @@
+# Install Nginx Ingress Controller
+minikube addons enable ingress
+
+# Verify Ingress controller is running
+kubectl get pods -n ingress-nginx
+
+# Apply the Ingress configuration
+kubectl apply -f ingress.yaml
+
+# Verify Ingress resource is created
+kubectl get ingress
+
+# Describe the Ingress resource to see details
+kubectl describe ingress messaging-app-ingress
+
+# Get the Ingress address
+kubectl get ingress messaging-app-ingress
+
+# For minikube, get the minikube IP
+minikube ip
+
+# Test the Ingress (replace <MINIKUBE_IP> with actual IP)
+curl http://<MINIKUBE_IP>/
+
+# Test the API endpoint
+curl http://<MINIKUBE_IP>/api/
+
+# If using host-based routing, add to /etc/hosts
+# echo "$(minikube ip) messaging-app.local" | sudo tee -a /etc/hosts
+
+# Then test with hostname
+# curl http://messaging-app.local/
