@@ -1,10 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: blue-deployment
+  name: green-deployment
   labels:
     app: messaging-app
-    version: blue
+    version: green
 spec:
   replicas: 3
   strategy:
@@ -15,16 +15,16 @@ spec:
   selector:
     matchLabels:
       app: messaging-app
-      version: blue
+      version: green
   template:
     metadata:
       labels:
         app: messaging-app
-        version: blue
+        version: green
     spec:
       containers:
       - name: messaging-app
-        image: messaging-app:2.0
+        image: messaging-app:3.0
         ports:
         - containerPort: 8000
         resources:

@@ -1,0 +1,128 @@
+#!/bin/bash
+
+echo "=== Blue-Green Deployment Strategy ==="
+echo ""
+
+# Deploy the blue version (current version)
+echo "Step 1: Deploying Blue version (v2.0)..."
+kubectl apply -f blue_deployment.yaml
+
+if [ $? -ne 0 ]; then
+    echo "Failed to deploy blue version"
+    exit 1
+fi
+
+# Wait for blue deployment to be ready
+echo "Waiting for blue deployment to be ready..."
+kubectl wait --for=condition=available --timeout=120s deployment/blue-deployment
+
+# Deploy the service pointing to blue version
+echo ""
+echo "Step 2: Creating service pointing to Blue version..."
+kubectl apply -f kubeservice.yaml
+
+if [ $? -ne 0 ]; then
+    echo "Failed to create service"
+    exit 1
+fi
+
+# Wait a bit for the service to be ready
+sleep 5
+
+# Check blue deployment pods
+echo ""
+echo "Step 3: Checking Blue deployment pods..."
+kubectl get pods -l version=blue
+
+# Check logs for blue version
+echo ""
+echo "Step 4: Checking logs for Blue version..."
+BLUE_POD=$(kubectl get pods -l version=blue -o jsonpath='{.items[0].metadata.name}')
+if [ -n "$BLUE_POD" ]; then
+    echo "Blue pod: $BLUE_POD"
+    kubectl logs $BLUE_POD --tail=20
+    
+    # Check for errors in blue logs
+    ERROR_COUNT=$(kubectl logs $BLUE_POD | grep -i "error" | wc -l)
+    if [ $ERROR_COUNT -gt 0 ]; then
+        echo "⚠ Warning: Found $ERROR_COUNT error(s) in blue deployment logs"
+    else
+        echo "✓ No errors found in blue deployment"
+    fi
+else
+    echo "No blue pods found"
+fi
+
+# Deploy the green version (new version)
+echo ""
+echo "Step 5: Deploying Green version (v3.0)..."
+kubectl apply -f green_deployment.yaml
+
+if [ $? -ne 0 ]; then
+    echo "Failed to deploy green version"
+    exit 1
+fi
+
+# Wait for green deployment to be ready
+echo "Waiting for green deployment to be ready..."
+kubectl wait --for=condition=available --timeout=120s deployment/green-deployment
+
+# Check green deployment pods
+echo ""
+echo "Step 6: Checking Green deployment pods..."
+kubectl get pods -l version=green
+
+# Check logs for green version
+echo ""
+echo "Step 7: Checking logs for Green version..."
+GREEN_POD=$(kubectl get pods -l version=green -o jsonpath='{.items[0].metadata.name}')
+if [ -n "$GREEN_POD" ]; then
+    echo "Green pod: $GREEN_POD"
+    kubectl logs $GREEN_POD --tail=20
+    
+    # Check for errors in green logs
+    ERROR_COUNT=$(kubectl logs $GREEN_POD | grep -i "error" | wc -l)
+    if [ $ERROR_COUNT -gt 0 ]; then
+        echo "⚠ Warning: Found $ERROR_COUNT error(s) in green deployment logs"
+        echo "Consider rolling back to blue version"
+    else
+        echo "✓ No errors found in green deployment"
+        echo ""
+        echo "Step 8: Switching traffic from Blue to Green..."
+        
+        # Update service to point to green version
+        kubectl patch service messaging-app-service -p '{"spec":{"selector":{"version":"green"}}}'
+        
+        if [ $? -eq 0 ]; then
+            echo "✓ Traffic successfully switched to Green version"
+        else
+            echo "✗ Failed to switch traffic to green version"
+            exit 1
+        fi
+    fi
+else
+    echo "No green pods found"
+    exit 1
+fi
+
+# Show final status
+echo ""
+echo "=== Final Deployment Status ==="
+echo ""
+echo "Blue Deployment:"
+kubectl get deployment blue-deployment
+echo ""
+echo "Green Deployment:"
+kubectl get deployment green-deployment
+echo ""
+echo "Service Status:"
+kubectl get service messaging-app-service
+echo ""
+echo "All Pods:"
+kubectl get pods -l app=messaging-app
+
+echo ""
+echo "=== Blue-Green Deployment Complete ==="
+echo "Current active version: Green (v3.0)"
+echo "To rollback to Blue version, run:"
+echo "  kubectl patch service messaging-app-service -p '{\"spec\":{\"selector\":{\"version\":\"blue\"}}}'"
