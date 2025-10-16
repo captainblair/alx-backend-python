@@ -1,0 +1,176 @@
+#!/bin/bash
+
+echo "=== Kubernetes Scaling and Load Testing ==="
+echo ""
+
+# Get the deployment name (try to find any deployment)
+DEPLOYMENT_NAME=$(kubectl get deployments -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+
+if [ -z "$DEPLOYMENT_NAME" ]; then
+    echo "No deployment found. Creating a default deployment..."
+    # Create a simple deployment if none exists
+    kubectl create deployment messaging-app --image=messaging-app:2.0 --port=8000
+    DEPLOYMENT_NAME="messaging-app"
+    sleep 5
+fi
+
+echo "Using deployment: $DEPLOYMENT_NAME"
+echo ""
+
+# Step 1: Scale the deployment to 3 replicas
+echo "Step 1: Scaling deployment to 3 replicas..."
+kubectl scale deployment/$DEPLOYMENT_NAME --replicas=3
+
+if [ $? -ne 0 ]; then
+    echo "Failed to scale deployment"
+    exit 1
+fi
+
+echo "✓ Deployment scaled successfully"
+echo ""
+
+# Wait for pods to be ready
+echo "Waiting for pods to be ready..."
+kubectl wait --for=condition=ready pod -l app=$DEPLOYMENT_NAME --timeout=120s
+
+# Step 2: Verify multiple pods are running
+echo ""
+echo "Step 2: Verifying pods are running..."
+kubectl get pods -l app=$DEPLOYMENT_NAME
+
+# Count the number of running pods
+RUNNING_PODS=$(kubectl get pods -l app=$DEPLOYMENT_NAME --field-selector=status.phase=Running -o json | grep -c "\"phase\": \"Running\"")
+echo ""
+echo "Number of running pods: $RUNNING_PODS"
+
+if [ $RUNNING_PODS -lt 3 ]; then
+    echo "⚠ Warning: Expected 3 running pods, but found $RUNNING_PODS"
+else
+    echo "✓ All 3 pods are running"
+fi
+
+# Get service URL for load testing
+echo ""
+echo "Step 3: Getting service URL for load testing..."
+SERVICE_URL=$(minikube service messaging-app-service --url 2>/dev/null | head -n 1)
+
+if [ -z "$SERVICE_URL" ]; then
+    echo "Service not found via minikube. Checking for service..."
+    SERVICE_NAME=$(kubectl get service -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    
+    if [ -n "$SERVICE_NAME" ]; then
+        # Try to get the service URL
+        SERVICE_URL=$(minikube service $SERVICE_NAME --url 2>/dev/null | head -n 1)
+    fi
+    
+    if [ -z "$SERVICE_URL" ]; then
+        # Fallback to localhost with port-forward
+        echo "Setting up port-forward..."
+        kubectl port-forward deployment/$DEPLOYMENT_NAME 8000:8000 &
+        PORT_FORWARD_PID=$!
+        sleep 3
+        SERVICE_URL="http://localhost:8000"
+    fi
+fi
+
+echo "Service URL: $SERVICE_URL"
+echo ""
+
+# Step 4: Perform load testing with wrk
+echo "Step 4: Performing load testing with wrk..."
+
+# Check if wrk is installed
+if command -v wrk &> /dev/null; then
+    echo "Running wrk load test (10 seconds, 4 threads, 100 connections)..."
+    wrk -t4 -c100 -d10s "$SERVICE_URL"
+else
+    echo "wrk is not installed. Using curl for basic load testing..."
+    echo "Sending 100 requests..."
+    
+    SUCCESS_COUNT=0
+    FAIL_COUNT=0
+    TOTAL_TIME=0
+    
+    for i in {1..100}; do
+        START_TIME=$(date +%s%N)
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVICE_URL" --connect-timeout 5 --max-time 10)
+        END_TIME=$(date +%s%N)
+        
+        DURATION=$((($END_TIME - $START_TIME) / 1000000))
+        TOTAL_TIME=$(($TOTAL_TIME + $DURATION))
+        
+        if [ "$HTTP_CODE" = "200" ]; then
+            SUCCESS_COUNT=$(($SUCCESS_COUNT + 1))
+        else
+            FAIL_COUNT=$(($FAIL_COUNT + 1))
+        fi
+        
+        if [ $(($i % 20)) -eq 0 ]; then
+            echo "Progress: $i/100 requests completed"
+        fi
+    done
+    
+    AVG_TIME=$(($TOTAL_TIME / 100))
+    
+    echo ""
+    echo "=== Load Test Results ==="
+    echo "Total requests: 100"
+    echo "Successful requests: $SUCCESS_COUNT"
+    echo "Failed requests: $FAIL_COUNT"
+    echo "Average response time: ${AVG_TIME}ms"
+    echo "Success rate: $(($SUCCESS_COUNT * 100 / 100))%"
+fi
+
+# Step 5: Monitor resource usage
+echo ""
+echo "Step 5: Monitoring resource usage with kubectl top..."
+echo ""
+
+# Check if metrics-server is available
+if kubectl top nodes &> /dev/null; then
+    echo "Node resource usage:"
+    kubectl top nodes
+    echo ""
+    
+    echo "Pod resource usage:"
+    kubectl top pods -l app=$DEPLOYMENT_NAME
+else
+    echo "Metrics server is not available. Enabling metrics-server addon..."
+    minikube addons enable metrics-server
+    
+    echo "Waiting for metrics-server to be ready..."
+    sleep 30
+    
+    if kubectl top nodes &> /dev/null; then
+        echo "Node resource usage:"
+        kubectl top nodes
+        echo ""
+        
+        echo "Pod resource usage:"
+        kubectl top pods -l app=$DEPLOYMENT_NAME
+    else
+        echo "⚠ Warning: Metrics server is still not ready. Resource monitoring unavailable."
+        echo "You can manually check resource usage later with:"
+        echo "  kubectl top nodes"
+        echo "  kubectl top pods"
+    fi
+fi
+
+# Cleanup port-forward if it was started
+if [ -n "$PORT_FORWARD_PID" ]; then
+    kill $PORT_FORWARD_PID 2>/dev/null
+fi
+
+# Final summary
+echo ""
+echo "=== Scaling Summary ==="
+echo "Deployment: $DEPLOYMENT_NAME"
+echo "Replicas: 3"
+echo ""
+kubectl get deployment $DEPLOYMENT_NAME
+echo ""
+echo "Pods:"
+kubectl get pods -l app=$DEPLOYMENT_NAME -o wide
+
+echo ""
+echo "=== Scaling and Load Testing Complete ==="
