@@ -1,0 +1,97 @@
+pipeline {
+    agent any
+    
+    environment {
+        PYTHON_VERSION = '3.9'
+        VENV_DIR = 'venv'
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                echo 'Checking out code from GitHub...'
+                git branch: 'main',
+                    credentialsId: 'github-credentials',
+                    url: 'https://github.com/YOUR_USERNAME/alx-backend-python.git'
+            }
+        }
+        
+        stage('Setup Python Environment') {
+            steps {
+                echo 'Setting up Python virtual environment...'
+                sh '''
+                    python3 -m venv ${VENV_DIR}
+                    . ${VENV_DIR}/bin/activate
+                    pip install --upgrade pip
+                '''
+            }
+        }
+        
+        stage('Install Dependencies') {
+            steps {
+                echo 'Installing project dependencies...'
+                sh '''
+                    . ${VENV_DIR}/bin/activate
+                    cd messaging_app
+                    pip install -r requirements.txt
+                    pip install pytest pytest-django pytest-cov pytest-html
+                '''
+            }
+        }
+        
+        stage('Run Tests') {
+            steps {
+                echo 'Running tests with pytest...'
+                sh '''
+                    . ${VENV_DIR}/bin/activate
+                    cd messaging_app
+                    export DJANGO_SETTINGS_MODULE=messaging_app.settings
+                    pytest --verbose \
+                           --junit-xml=test-results/junit.xml \
+                           --html=test-results/report.html \
+                           --self-contained-html \
+                           --cov=. \
+                           --cov-report=html:test-results/coverage \
+                           --cov-report=xml:test-results/coverage.xml \
+                           Django-Middleware-0x03/
+                '''
+            }
+        }
+        
+        stage('Generate Test Report') {
+            steps {
+                echo 'Publishing test reports...'
+                junit 'messaging_app/test-results/junit.xml'
+                publishHTML([
+                    allowMissing: false,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true,
+                    reportDir: 'messaging_app/test-results',
+                    reportFiles: 'report.html',
+                    reportName: 'Pytest HTML Report'
+                ])
+                publishHTML([
+                    allowMissing: false,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true,
+                    reportDir: 'messaging_app/test-results/coverage',
+                    reportFiles: 'index.html',
+                    reportName: 'Coverage Report'
+                ])
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo 'Cleaning up...'
+            cleanWs()
+        }
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed. Please check the logs.'
+        }
+    }
+}
